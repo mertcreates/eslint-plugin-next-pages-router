@@ -5,20 +5,21 @@
 [![license](https://img.shields.io/npm/l/@mertcreates/eslint-plugin-next-pages-router.svg)](LICENSE)
 [![CI](https://github.com/mertcreates/eslint-plugin-next-pages-router/actions/workflows/ci.yml/badge.svg)](https://github.com/mertcreates/eslint-plugin-next-pages-router/actions/workflows/ci.yml)
 
-ESLint rules to catch invalid Pages Router route comparisons and navigation
-calls. It validates hardcoded route strings against your `pages/` manifest and
-helps prevent typos or mismatched patterns.
+This ESLint plugin flags invalid Pages Router route comparisons and navigation
+calls. It checks route literals and statically resolved strings against your
+`pages/` tree so typos and mismatched dynamic patterns fail in lint.
 
-Pages Router only. App Router (`app/`) is out of scope.
+It only covers the Pages Router. App Router (`app/`) is out of scope.
 
-If you use the App Router, consider Next.js built-in typed routes instead.
+If you use the App Router, Next.js built-in typed routes are usually the better
+fit.
 
 ## Contents
 
 - [Features](#features)
 - [Install](#install)
-- [Usage (eslintrc)](#usage-eslintrc)
 - [Usage (flat config)](#usage-flat-config)
+- [Usage (eslintrc)](#usage-eslintrc)
 - [Rules](#rules)
 - [Options](#options)
 - [Compatibility](#compatibility)
@@ -27,11 +28,13 @@ If you use the App Router, consider Next.js built-in typed routes instead.
 
 ## Features
 
-- Validates route comparisons (`===`, `.includes()`, `switch`)
-- Checks `router.push` / `router.replace` targets
+- Flags `router.route`, `router.pathname`, and `router.asPath` comparisons
+  using `===`, `.includes()`, and `switch`
+- Checks `router.push` / `router.replace` plus `next/link` `href` and `as`
 - Distinguishes patterns (`/posts/[id]`) from concrete paths (`/posts/123`)
-- Handles query strings, hashes, trailing slashes, `basePath`, and `i18n.locales`
-- Provides ESLint suggestions (quick fixes in supporting editors)
+- Resolves string literals, `const` strings, and simple static templates
+- Handles query strings, hashes, trailing slashes, `basePath`, and locales
+- Offers ESLint suggestions where safe
 
 ## Install
 
@@ -45,15 +48,9 @@ pnpm add -D @mertcreates/eslint-plugin-next-pages-router
 bun add -D @mertcreates/eslint-plugin-next-pages-router
 ```
 
-## Usage (eslintrc)
-
-```json
-{
-  "extends": ["plugin:@mertcreates/next-pages-router/recommended"]
-}
-```
-
 ## Usage (flat config)
+
+Use this form for ESLint 9 and new ESLint 8 flat-config setups:
 
 ```js
 const nextRouting = require('@mertcreates/eslint-plugin-next-pages-router');
@@ -63,13 +60,23 @@ module.exports = [
 ];
 ```
 
+## Usage (eslintrc)
+
+Use this form for legacy `.eslintrc` projects:
+
+```json
+{
+  "extends": ["plugin:@mertcreates/next-pages-router/recommended"]
+}
+```
+
 ## Rules
 
 The recommended config enables both rules.
 
 ### `@mertcreates/next-pages-router/no-invalid-route-compare`
 
-Validates that:
+This rule checks that:
 
 - `router.route` and `router.pathname` are compared against **route patterns**
   that exist in `pages/` (e.g. `'/posts/[id]'`).
@@ -77,8 +84,8 @@ Validates that:
   and matches an existing pages route.
 - Query strings or hashes (`?` / `#`) are only used with `asPath`.
 
-Suggestions are provided as **ESLint suggestions** when
-`suggestClosestRoute` is enabled (default: on in VS Code, off in CLI).
+When `suggestClosestRoute` is enabled, the rule can offer **ESLint suggestions**
+(default: on in VS Code, off in CLI).
 
 Incorrect:
 
@@ -96,7 +103,8 @@ router.asPath === '/posts/123?sort=asc'
 
 ### `@mertcreates/next-pages-router/no-invalid-router-navigation`
 
-Validates `router.push` and `router.replace` targets:
+This rule checks `router.push` / `router.replace` arguments and `next/link`
+`href` / `as` props:
 
 - String URLs must be **concrete** and match a pages route.
 - URL objects may use a **route pattern** in `pathname` with `query`, or a
@@ -104,8 +112,9 @@ Validates `router.push` and `router.replace` targets:
 - Passing a pattern string is only valid when an `as` URL is provided.
 - `as` must be a concrete URL (no route patterns).
 
-When `preferUrlObject` is enabled (default), string `url` + string `as`
-usage is reported as legacy. Use a UrlObject instead.
+With `preferUrlObject` enabled, legacy `router.push(pattern, as)` and
+`<Link href={pattern} as={as}>` forms are reported when a safe UrlObject
+suggestion can be built.
 
 Incorrect:
 
@@ -121,10 +130,23 @@ router.push('/posts/123')
 router.push({ pathname: '/posts/[id]', query: { id: '123' } })
 ```
 
+Incorrect:
+
+```jsx
+<Link href="/posts/[id]" />
+```
+
+Correct:
+
+```jsx
+<Link href="/posts/123" />
+<Link href={{ pathname: '/posts/[id]', query: { id: '123' } }} />
+```
+
 ## Options
 
-Options below are optional and provided as the first rule option. Options
-are set per rule, and some only apply to the compare rule.
+All options are optional and go in the first rule config object. Each rule has
+its own options, and some only apply to the compare rule.
 
 ```json
 {
@@ -170,20 +192,27 @@ Option reference:
 
 | Option | Type | Default | Applies to | Description |
 | --- | --- | --- | --- | --- |
-| `pagesDir` | `string` | `"pages"` | both | Directory for Next.js pages. |
-| `readNextConfig` | `boolean` | `false` | both | If true, reads `basePath` and `i18n.locales` from `next.config.*`. |
-| `nextConfigPath` | `string` | `""` | both | Optional path to Next config when `readNextConfig` is enabled. |
-| `basePath` | `string` | `""` | both | Overrides Next config. |
-| `locales` | `string[]` | `[]` | both | Overrides Next config. |
-| `routerObjects` | `string[]` | `["router", "Router"]` | both | Allow-list of router object identifiers or member paths (e.g. `"router"`, `"props.router"`). |
+| `pagesDir` | `string` | `"pages"` | both | Path to your Next.js pages directory. |
+| `readNextConfig` | `boolean` | `false` | both | Reads `basePath` and `i18n.locales` from `next.config.*` when enabled. |
+| `nextConfigPath` | `string` | `""` | both | Optional path to a Next config file when `readNextConfig` is on. |
+| `basePath` | `string` | `""` | both | Overrides the value from Next config. |
+| `locales` | `string[]` | `[]` | both | Overrides the value from Next config. |
+| `routerObjects` | `string[]` | `["router", "Router"]` | both | Allowed router identifiers or member paths, such as `"router"` or `"props.router"`. |
 | `routeProperties` | `string[]` | `["route","pathname"]` | compare | Router fields treated as route patterns. |
-| `checkEquality` | `boolean` | `true` | compare | Enable `===`/`==` comparisons. |
-| `checkIncludes` | `boolean` | `true` | compare | Enable `includes(...)` checks. |
-| `checkSwitch` | `boolean` | `true` | compare | Enable `switch (...)` checks. |
-| `warnOnUnknownPaths` | `boolean` | `true` | both | Warn when `asPath` or navigation targets do not match any known pages route. |
-| `suggestClosestRoute` | `boolean` | `true` in VS Code, `false` in CLI | both | Adds "Did you mean" suggestions. When set, it overrides the default behavior. |
-| `preferUrlObject` | `boolean` | `true` | navigation | Report legacy `router.push(pattern, as)` usage and prefer UrlObject with `pathname` + `query`. |
-| `skipIfPagesDirMissing` | `boolean` | `true` | both | Skip checks when the `pagesDir` doesn't exist (useful in monorepos or non-Next builds). |
+| `checkEquality` | `boolean` | `true` | compare | Enables `===` and `==` checks. |
+| `checkIncludes` | `boolean` | `true` | compare | Enables `includes(...)` checks. |
+| `checkSwitch` | `boolean` | `true` | compare | Enables `switch (...)` checks. |
+| `warnOnUnknownPaths` | `boolean` | `true` | both | Warns when `asPath` or navigation targets do not match a known pages route. |
+| `suggestClosestRoute` | `boolean` | `true` in VS Code, `false` in CLI | both | Adds "Did you mean" suggestions. This overrides the default behavior when set. |
+| `preferUrlObject` | `boolean` | `true` | navigation | Reports legacy `router.push(pattern, as)` usage and prefers a UrlObject with `pathname` + `query`. |
+| `skipIfPagesDirMissing` | `boolean` | `true` | both | Skips checks when `pagesDir` does not exist, which is useful in monorepos or non-Next builds. |
+
+When `readNextConfig` is enabled, this plugin reads `next.config.js`,
+`next.config.cjs`, `next.config.mjs`, or `next.config.json` from the project
+root. CommonJS config files are loaded with `require`, so any top-level config
+code can run during linting. Static `next.config.mjs` files with an
+`export default { ... }` object are supported synchronously; dynamic ESM config
+files are skipped.
 
 ## Compatibility
 
@@ -193,14 +222,15 @@ Option reference:
 
 ## Benchmarks
 
-Benchmarks here measure **rule overhead** (not total ESLint time).
+These benchmarks measure **rule overhead**, not total ESLint time.
 
-Latest run (mixed mode, 12k statements across 80 files, 5-run average):
+Latest run, mixed mode, 12k statements across 80 files, 5-run average on
+Node `v22.22.2`:
 
-- Real project pages (46 routes): ~2–3 ms per run
-- Synthetic stress (6000 routes): ~2–3 ms per run
+- Real project pages dir (48 routes): 2.26 ms average, 2.91 ms p95
+- Synthetic stress (6000 routes): 2.63 ms average, 3.69 ms p95
 
-See benchmark details in [BENCHMARKS.md](BENCHMARKS.md).
+See [BENCHMARKS.md](BENCHMARKS.md) for the full setup.
 
 ## License
 

@@ -1,21 +1,16 @@
 const path = require('path');
-const { RuleTester } = require('eslint');
 const rule = require('../../rules/no-invalid-router-navigation');
 const {
   buildUrlObjectDesc,
   buildReplacementDesc,
 } = require('../../lib/suggestions');
+const { createRuleTester } = require('./ruleTesterCompat');
 
 delete process.env.VSCODE_PID;
 delete process.env.VSCODE_CWD;
 process.env.TERM_PROGRAM = 'node';
 
-const ruleTester = new RuleTester({
-  languageOptions: {
-    ecmaVersion: 2020,
-    sourceType: 'module',
-  },
-});
+const ruleTester = createRuleTester({ jsx: true });
 
 const pagesDir = path.join(__dirname, '../fixtures/pages');
 const pagesDirWithConfig = path.join(
@@ -40,11 +35,23 @@ describe('no-invalid-router-navigation', () => {
         options: [{ pagesDir }],
       },
       {
+        code: "const href = '/about'; router.push(href)",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "const slug = '123'; const href = `/posts/${slug}`; router.replace(href)",
+        options: [{ pagesDir }],
+      },
+      {
         code: "Router.push('/about')",
         options: [{ pagesDir }],
       },
       {
         code: "router.push({ pathname: '/posts/[id]', query: { id: postId } })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "const pathname = '/posts/[id]'; router.push({ pathname, query: { id: postId } })",
         options: [{ pagesDir }],
       },
       {
@@ -73,6 +80,10 @@ describe('no-invalid-router-navigation', () => {
       },
       {
         code: "Router.replace('/about')",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import Link from 'next/link'; function Demo() { const Link = () => null; return <Link href='/abot' />; }",
         options: [{ pagesDir }],
       },
       {
@@ -123,6 +134,16 @@ describe('no-invalid-router-navigation', () => {
             ],
           },
         ],
+      },
+      {
+        code: "const href = '/abot'; router.replace(href)",
+        options: [{ pagesDir, suggestClosestRoute: true }],
+        errors: [{ messageId: 'navigationUnknown' }],
+      },
+      {
+        code: "const pathname = '/post/[id]'; router.push({ pathname })",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'pathnameUnknown' }],
       },
       {
         code: "router.push({ pathname: '/post/[id]' })",
@@ -255,6 +276,83 @@ describe('no-invalid-router-navigation', () => {
     ],
   });
 
+  ruleTester.run('Link href', rule, {
+    valid: [
+      {
+        code: "import Link from 'next/link'; const element = <Link href='/about' />;",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "const href = '/about'; import Link from 'next/link'; const element = <Link href={href} />;",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "const slug = '123'; const href = `/posts/${slug}`; import Link from 'next/link'; const element = <Link href={href} />;",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: { id: postId } }} />;",
+        options: [{ pagesDir }],
+      },
+    ],
+    invalid: [
+      {
+        code: "import Link from 'next/link'; const element = <Link href='/abot' />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefUnknown' }],
+      },
+      {
+        code: "import Link from 'next/link'; const element = <Link href='/posts/[id]' />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefPatternWithoutAs' }],
+      },
+      {
+        code:
+          "const href = '/abot'; import Link from 'next/link'; const element = <Link href={href} />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefUnknown' }],
+      },
+      {
+        code:
+          "const href = '/posts/[id]'; import Link from 'next/link'; const element = <Link href={href} />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefPatternWithoutAs' }],
+      },
+      {
+        code:
+          "const asPath = '/abot'; import Link from 'next/link'; const element = <Link href='/posts/[id]' as={asPath} />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkAsUnknown' }],
+      },
+      {
+        code:
+          "const asPath = '/posts/123'; import Link from 'next/link'; const element = <Link href='/posts/[id]' as={asPath} />;",
+        options: [{ pagesDir }],
+        errors: [
+          {
+            messageId: 'linkPreferUrlObject',
+            suggestions: [
+              {
+                desc: buildUrlObjectDesc(),
+                output:
+                  "const asPath = '/posts/123'; import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: { id: '123' } }} />;",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/abot' }} />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefPathnameUnknown' }],
+      },
+    ],
+  });
+
   ruleTester.run('navigation options and edge cases', rule, {
     valid: [
       {
@@ -294,6 +392,13 @@ describe('no-invalid-router-navigation', () => {
       {
         code: "router.push('/posts/[id]', '/posts/[id]?x=1')",
         options: [{ pagesDir }],
+        errors: [{ messageId: 'asWithPattern' }],
+      },
+      {
+        code: "router.push('/posts/[id]', '/posts/[id]')",
+        options: [
+          { pagesDir, warnOnUnknownPaths: false, preferUrlObject: false },
+        ],
         errors: [{ messageId: 'asWithPattern' }],
       },
       {

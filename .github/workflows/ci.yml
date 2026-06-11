@@ -8,8 +8,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version: [18, 20]
+        eslint-version: [8, 9]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,5 +27,8 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      - name: Use ESLint ${{ matrix.eslint-version }}
+        run: bun add --dev eslint@${{ matrix.eslint-version }}
+
       - name: Test
-        run: bun test
+        run: bun run test

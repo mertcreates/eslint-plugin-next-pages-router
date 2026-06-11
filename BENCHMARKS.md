@@ -1,11 +1,12 @@
 # Benchmarks
 
-This repo includes a synthetic benchmark that targets rule overhead, plus a
-real-project mode that reuses an existing `pages/` directory. It can run in two
-linting modes.
+This repo includes two benchmark modes. One uses generated routes to measure
+rule overhead in isolation. The other reuses a real `pages/` directory so you
+can see how the rules behave on an actual project.
 
-1. `single`: Lints one large file string. This isolates rule overhead.
-2. `files`: Lints many files from disk. This includes file I/O and parsing.
+1. `single`: Lints one large file string. This keeps the measurement close to
+   the rule itself.
+2. `files`: Lints many files from disk. This adds file I/O and parsing cost.
 
 ## Quick Start
 
@@ -13,15 +14,15 @@ linting modes.
 node scripts/benchmark.js
 ```
 
-## Realistic Mode (Synthetic)
+## Synthetic route set
 
 ```bash
 node scripts/benchmark.js --mode files --routes 5000 --files 200 --iterations 20 --suggest true --rules mixed
 ```
 
-## Real Project Mode
+## Real project mode
 
-Use an existing `pages/` directory to match the real route set:
+Point the benchmark at an existing `pages/` directory to use your real route set:
 
 ```bash
 node scripts/benchmark.js \
@@ -35,14 +36,14 @@ node scripts/benchmark.js \
   --rules mixed
 ```
 
-## Suggestions Cost
+## Suggestions cost
 
 ```bash
 node scripts/benchmark.js --mode files --routes 1000 --files 100 --iterations 20 --suggest false --rules mixed
 node scripts/benchmark.js --mode files --routes 1000 --files 100 --iterations 20 --suggest true --rules mixed
 ```
 
-## JSON Output
+## JSON output
 
 ```bash
 node scripts/benchmark.js --mode files --routes 1000 --files 100 --iterations 20 --suggest true --rules mixed --json true
@@ -64,33 +65,35 @@ node scripts/benchmark.js --mode files --routes 1000 --files 100 --iterations 20
 | `--navigation-ratio` | `number` | `0.3` | mixed | Ratio of navigation statements in mixed mode. |
 | `--json` | `boolean` | `false` | both | Output JSON only. |
 
-## Latest Results (2026-02-04)
+## Latest results (2026-06-11)
 
-All runs below used `--mode files --rules mixed --suggest true`. Results are
-averaged over 5 runs.
+All runs below used `--mode files --rules mixed --suggest true`. Each result is
+the average of 5 runs on Node `v22.22.2` on macOS.
 
 | Scenario | Routes | Statements | Files | Avg | P95 |
 | --- | --- | --- | --- | --- | --- |
-| Synthetic (generated) | 6000 | 12000 | 80 | 2.49 ms | 3.41 ms |
-| Real project pages dir | 46 | 12000 | 80 | 2.64 ms | 3.52 ms |
+| Synthetic (generated) | 6000 | 12000 | 80 | 2.63 ms | 3.69 ms |
+| Real project pages dir | 48 | 12000 | 80 | 2.26 ms | 2.91 ms |
+| Fixture pages dir | 8 | 12000 | 80 | 2.33 ms | 2.92 ms |
 
 Commands used:
 
 ```bash
 node scripts/benchmark.js --routes 3000 --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed
-node scripts/benchmark.js --pages-dir "/absolute/path/to/pages" --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed
+node scripts/benchmark.js --pages-dir "/absolute/path/to/real/pages" --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed
+node scripts/benchmark.js --pages-dir tests/fixtures/pages --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed
 ```
 
-Run 5x and average:
+Run 5 times and average:
 
 ```bash
-node -e "const {execSync}=require('child_process');const runs=5;const cmd='node scripts/benchmark.js --routes 3000 --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed --json true';const results=[];for(let i=0;i<runs;i+=1){results.push(JSON.parse(execSync(cmd,{encoding:'utf8'})));}const avg=(arr,key)=>arr.reduce((s,r)=>s+r[key],0)/arr.length;const summary={runs,avgMs:avg(results,'avgMs'),p95Ms:avg(results,'p95Ms')};console.log(summary);"
+node -e "const {execFileSync}=require('child_process');const runs=5;const args=['scripts/benchmark.js','--routes','3000','--statements','12000','--iterations','50','--warmup','2','--suggest','true','--mode','files','--files','80','--rules','mixed','--json','true'];const results=[];for(let i=0;i<runs;i+=1){results.push(JSON.parse(execFileSync(process.execPath,args,{encoding:'utf8'})));}const avg=(key)=>results.reduce((sum,r)=>sum+r[key],0)/results.length;console.log({runs,avgMs:avg('avgMs'),p95Ms:avg('p95Ms')});"
 ```
 
 Results vary by machine and workload. Compare relative changes, not absolute numbers.
 
 ## Notes
 
-1. `files` mode is closer to real ESLint runs.
-2. `single` mode is useful for tracking rule-only overhead.
-3. Benchmarks vary by machine. Compare relative changes, not absolute numbers.
+1. `files` mode is closer to a real ESLint run.
+2. `single` mode is useful when you want to isolate rule overhead.
+3. Benchmarks vary by machine, so compare relative changes instead of absolute numbers.

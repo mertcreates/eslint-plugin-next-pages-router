@@ -1,18 +1,13 @@
 const path = require('path');
-const { RuleTester } = require('eslint');
 const rule = require('../../rules/no-invalid-route-compare');
 const { buildReplacementDesc } = require('../../lib/suggestions');
+const { createRuleTester } = require('./ruleTesterCompat');
 
 delete process.env.VSCODE_PID;
 delete process.env.VSCODE_CWD;
 process.env.TERM_PROGRAM = 'node';
 
-const ruleTester = new RuleTester({
-  languageOptions: {
-    ecmaVersion: 2020,
-    sourceType: 'module',
-  },
-});
+const ruleTester = createRuleTester();
 
 const pagesDir = path.join(__dirname, '../fixtures/pages');
 const missingPagesDir = path.join(__dirname, '../fixtures/missing-pages');
