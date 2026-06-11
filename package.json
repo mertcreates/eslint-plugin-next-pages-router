@@ -1,6 +1,6 @@
 {
   "name": "@mertcreates/eslint-plugin-next-pages-router",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "ESLint rules to validate Next.js Pages Router route comparisons and navigation targets against your pages manifest.",
   "author": "Mert Ercan <me@mertercan.com> (https://mertercan.com)",
   "type": "commonjs",
@@ -13,6 +13,7 @@
     "rules/",
     "lib/",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "keywords": [

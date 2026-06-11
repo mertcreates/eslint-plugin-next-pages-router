@@ -29,7 +29,7 @@ fit.
 ## Features
 
 - Flags `router.route`, `router.pathname`, and `router.asPath` comparisons
-  using `===`, `.includes()`, and `switch`
+  using `===`, `==`, `!==`, `!=`, `.includes()`, and `switch`
 - Checks `router.push` / `router.replace` plus `next/link` `href` and `as`
 - Distinguishes patterns (`/posts/[id]`) from concrete paths (`/posts/123`)
 - Resolves string literals, `const` strings, and simple static templates
@@ -193,7 +193,7 @@ Option reference:
 | Option | Type | Default | Applies to | Description |
 | --- | --- | --- | --- | --- |
 | `pagesDir` | `string` | `"pages"` | both | Path to your Next.js pages directory. |
-| `readNextConfig` | `boolean` | `false` | both | Reads `basePath` and `i18n.locales` from `next.config.*` when enabled. |
+| `readNextConfig` | `boolean` | `false` | both | Reads `basePath` and `i18n.locales` from `next.config.js`, `next.config.cjs`, `next.config.mjs`, or `next.config.json` when enabled. |
 | `nextConfigPath` | `string` | `""` | both | Optional path to a Next config file when `readNextConfig` is on. |
 | `basePath` | `string` | `""` | both | Overrides the value from Next config. |
 | `locales` | `string[]` | `[]` | both | Overrides the value from Next config. |
@@ -211,7 +211,7 @@ When `readNextConfig` is enabled, this plugin reads `next.config.js`,
 `next.config.cjs`, `next.config.mjs`, or `next.config.json` from the project
 root. CommonJS config files are loaded with `require`, so any top-level config
 code can run during linting. Static `next.config.mjs` files with an
-`export default { ... }` object are supported synchronously; dynamic ESM config
+`export default { ... }` object are supported synchronously. Dynamic ESM config
 files are skipped.
 
 ## Compatibility
