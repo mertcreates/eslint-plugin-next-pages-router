@@ -9,10 +9,20 @@ This ESLint plugin flags invalid Pages Router route comparisons and navigation
 calls. It checks route literals and statically resolved strings against your
 `pages/` tree so typos and mismatched dynamic patterns fail in lint.
 
+This plugin grew out of a route comparison mistake that reached QA in a real
+project.
+
+[Read the short story behind it →](https://mertercan.com/making/eslint-next-pages-router)
+
 It only covers the Pages Router. App Router (`app/`) is out of scope.
 
 If you use the App Router, Next.js built-in typed routes are usually the better
 fit.
+
+Using the Pages Router in an unusual setup?
+
+If the plugin misses a route or flags a valid one, open an issue. Those edge
+cases are the most useful input for making the rules more reliable.
 
 ## Contents
 
