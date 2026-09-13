@@ -3,7 +3,10 @@ const assert = require('assert');
 const {
   buildDynamicMatcherIndex,
   findMatchingPattern,
+  getDynamicRouteParameters,
   matchesAnyRoutePattern,
+  parseDynamicRouteSegment,
+  patternToRegex,
 } = require('../../lib/routes');
 
 describe('route matcher index', () => {
@@ -35,6 +38,49 @@ describe('route matcher index', () => {
     assert.strictEqual(
       matchesAnyRoutePattern('/missing', new Set(['/about']), null),
       false
+    );
+  });
+
+  it('describes dynamic route segments in page order', () => {
+    assert.strictEqual(parseDynamicRouteSegment('about'), null);
+    assert.deepStrictEqual(parseDynamicRouteSegment('[id]'), {
+      name: 'id',
+      repeat: false,
+      optional: false,
+    });
+    assert.deepStrictEqual(parseDynamicRouteSegment('[...slug]'), {
+      name: 'slug',
+      repeat: true,
+      optional: false,
+    });
+    assert.deepStrictEqual(parseDynamicRouteSegment('[[...slug]]'), {
+      name: 'slug',
+      repeat: true,
+      optional: true,
+    });
+    assert.deepStrictEqual(
+      getDynamicRouteParameters('/[lang]/blog/[category]/[...slug]'),
+      [
+        { name: 'lang', repeat: false, optional: false },
+        { name: 'category', repeat: false, optional: false },
+        { name: 'slug', repeat: true, optional: false },
+      ]
+    );
+  });
+
+  it('preserves required and optional catch-all matching', () => {
+    assert.strictEqual(patternToRegex('/blog/[...slug]').test('/blog'), false);
+    assert.strictEqual(
+      patternToRegex('/blog/[...slug]').test('/blog/a/b'),
+      true
+    );
+    assert.strictEqual(
+      patternToRegex('/blog/[[...slug]]').test('/blog'),
+      true
+    );
+    assert.strictEqual(
+      patternToRegex('/blog/[[...slug]]').test('/blog/a/b'),
+      true
     );
   });
 });

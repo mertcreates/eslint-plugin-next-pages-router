@@ -23,8 +23,8 @@ router.route === '/posts/[id]'
 router.push({ pathname: '/posts/[id]', query: { id: '123' } })
 ```
 
-This plugin grew out of a route comparison mistake that reached QA in a real
-project.
+This plugin grew out of a real project that needed reliable route comparison
+checks before QA.
 
 [Read the short story behind it →](https://mertercan.com/making/eslint-next-pages-router)
 
@@ -91,6 +91,8 @@ suggest replacing separate path and URL arguments with a URL object containing
   in the current file. Mutable variables, imports, function parameters, calls,
   and templates with runtime values fall outside that scope.
 - Handles query strings, hashes, trailing slashes, `basePath`, and locales
+- Reports required dynamic parameters that are definitely missing from a
+  statically readable URL object's `query`
 - Offers ESLint suggestions where safe
 
 ## Usage (flat config)
@@ -155,8 +157,10 @@ This rule checks `router.push` / `router.replace` arguments and `next/link`
 - String URLs must match a page in `pages/`; static paths such as `/about` are
   valid as written. A path with dynamic placeholders such as `/posts/[id]`
   needs parameter values in the URL, such as `/posts/123`.
-- URL objects may use a page path with placeholders in `pathname` and
-  provide values in `query`, or use any URL that matches a page directly.
+- URL objects may use a page path with placeholders in `pathname` and provide
+  values in `query`, or use any URL that matches a page directly. The rule
+  names required `[id]` and `[...slug]` parameters that are definitely missing
+  from a statically readable query object. `[[...slug]]` is optional.
 - If you pass a string with placeholders, also pass an `as` URL with the
   parameter values filled in.
 - `as` must match a page; it may be a static URL such as `/about` or a URL with
@@ -172,6 +176,7 @@ Incorrect:
 ```js
 router.push('/unknown')
 router.push('/posts/[id]')
+router.push({ pathname: '/posts/[id]', query: {} })
 ```
 
 Correct:
@@ -181,6 +186,10 @@ router.push('/about')
 router.push('/posts/123')
 router.push({ pathname: '/posts/[id]', query: { id: '123' } })
 ```
+
+The rule reports a missing parameter only when it can read the whole query
+object. Runtime objects, spreads, and unresolved computed property names are
+left alone because the rule cannot know which keys they contain.
 
 Leave out `routerObjects` to let the rules recognize routers from their
 `next/router` imports, including renamed imports and local variables:
@@ -331,7 +340,12 @@ dependency. If your project uses ESLint 8 APIs directly, you may also want
 
 ## Benchmarks
 
-See [BENCHMARKS.md](BENCHMARKS.md) for the benchmark setup, measurements, and
+The local 1.2.1 comparison found no measurable performance change. Version
+1.2.1 was 0.7% faster on generated routes and 1.3% slower on the fixture route
+set, with overlapping process ranges in both cases. The fixture workload also
+produced 150 more diagnostics because it exercises missing query parameters.
+
+See [BENCHMARKS.md](BENCHMARKS.md) for the commands, environment, and full
 results.
 
 ## License

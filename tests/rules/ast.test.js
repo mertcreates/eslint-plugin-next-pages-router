@@ -5,6 +5,7 @@ const {
   getStaticStringValue,
   getScopeVariable,
   isImportedBindingFromSource,
+  readObjectProperty,
 } = require('../../lib/ast');
 
 describe('ast helpers', () => {
@@ -117,5 +118,129 @@ describe('ast helpers', () => {
       isImportedBindingFromSource(localVariable, 'next/link'),
       false
     );
+  });
+
+  it('distinguishes known, missing, and unknown object properties', () => {
+    const firstValue = { type: 'Literal', value: 'first' };
+    const lastValue = { type: 'Literal', value: 'last' };
+    const explicitAfterSpread = { type: 'Literal', value: 'explicit' };
+
+    assert.deepStrictEqual(
+      readObjectProperty(
+        {
+          type: 'ObjectExpression',
+          properties: [
+            {
+              type: 'Property',
+              computed: false,
+              key: { type: 'Identifier', name: 'query' },
+              value: firstValue,
+            },
+            {
+              type: 'Property',
+              computed: false,
+              key: { type: 'Literal', value: 'query' },
+              value: lastValue,
+            },
+          ],
+        },
+        'query'
+      ),
+      { status: 'known', node: lastValue }
+    );
+
+    assert.deepStrictEqual(
+      readObjectProperty(
+        {
+          type: 'ObjectExpression',
+          properties: [
+            {
+              type: 'Property',
+              computed: false,
+              key: { type: 'Identifier', name: 'pathname' },
+              value: firstValue,
+            },
+          ],
+        },
+        'query'
+      ),
+      { status: 'missing' }
+    );
+
+    assert.deepStrictEqual(
+      readObjectProperty(
+        {
+          type: 'ObjectExpression',
+          properties: [
+            { type: 'SpreadElement', argument: { type: 'Identifier', name: 'base' } },
+          ],
+        },
+        'query'
+      ),
+      { status: 'unknown' }
+    );
+
+    assert.deepStrictEqual(
+      readObjectProperty(
+        {
+          type: 'ObjectExpression',
+          properties: [
+            { type: 'SpreadElement', argument: { type: 'Identifier', name: 'base' } },
+            {
+              type: 'Property',
+              computed: false,
+              key: { type: 'Identifier', name: 'query' },
+              value: explicitAfterSpread,
+            },
+          ],
+        },
+        'query'
+      ),
+      { status: 'known', node: explicitAfterSpread }
+    );
+  });
+
+  it('handles static and runtime computed property names conservatively', () => {
+    const value = { type: 'Literal', value: 'value' };
+
+    assert.deepStrictEqual(
+      readObjectProperty(
+        {
+          type: 'ObjectExpression',
+          properties: [
+            {
+              type: 'Property',
+              computed: true,
+              key: { type: 'Literal', value: 'id' },
+              value,
+            },
+          ],
+        },
+        'id'
+      ),
+      { status: 'known', node: value }
+    );
+
+    assert.deepStrictEqual(
+      readObjectProperty(
+        {
+          type: 'ObjectExpression',
+          properties: [
+            {
+              type: 'Property',
+              computed: true,
+              key: { type: 'Identifier', name: 'key' },
+              value,
+            },
+          ],
+        },
+        'id'
+      ),
+      { status: 'unknown' }
+    );
+
+    assert.deepStrictEqual(readObjectProperty(null, 'id'), {
+      status: 'unknown',
+    });
   });
 });

@@ -39,6 +39,8 @@ function createLinkReporter() {
       asWithPattern: 'linkAsWithPattern',
       asUnknown: 'linkAsUnknown',
       preferUrlObject: 'linkPreferUrlObject',
+      missingQueryParam: 'linkHrefMissingQueryParam',
+      missingQueryParams: 'linkHrefMissingQueryParams',
     },
   });
 
@@ -86,5 +88,76 @@ describe('navigationReporter', () => {
       range: [0, 24],
       text: "{ pathname: '/posts/[id]', query: { id: '123' } }",
     });
+  });
+
+  it('reports missing query parameters without suggesting values', () => {
+    const { reports, reporter } = createLinkReporter();
+
+    reporter.reportMissingQueryParams({
+      node: {},
+      pathname: '/posts/[id]',
+      missingParams: ['id'],
+      method: 'href',
+      asValue: null,
+      hasUnknownAs: false,
+      asWasReported: false,
+    });
+    reporter.reportMissingQueryParams({
+      node: {},
+      pathname: '/posts/[id]',
+      missingParams: ['category', 'slug'],
+      method: 'href',
+      asValue: null,
+      hasUnknownAs: false,
+      asWasReported: false,
+    });
+
+    assert.deepStrictEqual(reports, [
+      {
+        node: {},
+        messageId: 'linkHrefMissingQueryParam',
+        data: {
+          method: 'href',
+          pathname: '/posts/[id]',
+          param: 'id',
+          params: "'id'",
+        },
+      },
+      {
+        node: {},
+        messageId: 'linkHrefMissingQueryParams',
+        data: {
+          method: 'href',
+          pathname: '/posts/[id]',
+          param: 'category',
+          params: "'category' and 'slug'",
+        },
+      },
+    ]);
+  });
+
+  it('accepts matching or unresolved as values for missing query checks', () => {
+    const { reports, reporter } = createLinkReporter();
+
+    reporter.reportMissingQueryParams({
+      node: {},
+      pathname: '/posts/[id]',
+      missingParams: ['id'],
+      method: 'href',
+      asValue: '/posts/123',
+      hasUnknownAs: false,
+      asWasReported: false,
+    });
+    reporter.reportMissingQueryParams({
+      node: {},
+      pathname: '/posts/[id]',
+      missingParams: ['id'],
+      method: 'href',
+      asValue: null,
+      hasUnknownAs: true,
+      asWasReported: false,
+    });
+
+    assert.deepStrictEqual(reports, []);
   });
 });

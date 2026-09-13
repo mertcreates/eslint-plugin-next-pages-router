@@ -1,8 +1,5 @@
 const {
-  getObjectPropertyValue,
   getJsxAttributeValue,
-  isStringLiteral,
-  getStringLiteralValue,
   getStaticStringValue,
 } = require('../lib/ast');
 const { createNavigationReporter } = require('../lib/navigationReporter');
@@ -13,6 +10,9 @@ const {
 const { createRuleContext } = require('../lib/ruleContext');
 const { getAllowedRouterMethodCall } = require('../lib/routerCalls');
 const { createStaticIdentifierResolver } = require('../lib/staticStrings');
+const {
+  evaluateUrlObjectQueryParams,
+} = require('../lib/urlObjectParams');
 
 function getRouterMethodCallInfo(
   node,
@@ -38,6 +38,8 @@ const LINK_MESSAGES = {
   asWithPattern: 'linkAsWithPattern',
   asUnknown: 'linkAsUnknown',
   preferUrlObject: 'linkPreferUrlObject',
+  missingQueryParam: 'linkHrefMissingQueryParam',
+  missingQueryParams: 'linkHrefMissingQueryParams',
 };
 
 const ROUTER_MESSAGES = {
@@ -49,6 +51,8 @@ const ROUTER_MESSAGES = {
   asWithPattern: 'asWithPattern',
   asUnknown: 'asUnknown',
   preferUrlObject: 'preferUrlObject',
+  missingQueryParam: 'navigationMissingQueryParam',
+  missingQueryParams: 'navigationMissingQueryParams',
 };
 
 const noInvalidRouterNavigation = {
@@ -70,6 +74,7 @@ const noInvalidRouterNavigation = {
         invalid: [
           "router.push('/posts/[id]')",
           "router.replace('/post/[id]')",
+          "router.push({ pathname: '/posts/[id]', query: {} })",
           "router.push({ pathname: '/post/[id]' })",
           "router.push('/posts/[id]', '/post/[id]')",
           "import Link from 'next/link'; const element = <Link href='/posts/[id]' />;",
@@ -111,6 +116,10 @@ const noInvalidRouterNavigation = {
         "router.{{method}} pathname must not contain query (?...) or hash (#...). Use query or `as` instead.",
       preferUrlObject:
         "router.{{method}} passes a page path and a separate URL. Use `pathname` and `query` to keep the parameter values together.",
+      navigationMissingQueryParam:
+        "router.{{method}} pathname '{{pathname}}' is missing the required query parameter '{{param}}'. Add it to `query` or pass an `as` URL that matches this page path.",
+      navigationMissingQueryParams:
+        "router.{{method}} pathname '{{pathname}}' is missing the required query parameters {{params}}. Add them to `query` or pass an `as` URL that matches this page path.",
       linkHrefPatternWithoutAs:
         "Link href uses page path '{{value}}' but no `as` value was provided. Use a URL object with `pathname`/`query` or pass a URL with parameter values as the `as` value.",
       linkHrefPatternUnknown:
@@ -127,6 +136,10 @@ const noInvalidRouterNavigation = {
         "Link `as` value '{{value}}' does not match any page in your pages directory. Check the path against your pages directory.{{suggestion}}",
       linkPreferUrlObject:
         "Link passes a page path and a separate URL. Use `pathname` and `query` to keep the parameter values together.",
+      linkHrefMissingQueryParam:
+        "Link href pathname '{{pathname}}' is missing the required query parameter '{{param}}'. Add it to `query` or pass an `as` URL that matches this page path.",
+      linkHrefMissingQueryParams:
+        "Link href pathname '{{pathname}}' is missing the required query parameters {{params}}. Add them to `query` or pass an `as` URL that matches this page path.",
     },
   },
 
@@ -180,6 +193,67 @@ const noInvalidRouterNavigation = {
     });
     const linkNames = new Set();
 
+    function analyzeUrlObject(node, resolveIdentifier) {
+      return evaluateUrlObjectQueryParams({
+        urlObjectNode: node,
+        resolveIdentifierValue: resolveIdentifier,
+      });
+    }
+
+    function resolveNavigationPath(node, resolveIdentifier) {
+      if (!node) {
+        return { status: 'absent', kind: 'absent', node: null, value: null };
+      }
+
+      const resolvedValue = getStaticStringValue(node, resolveIdentifier);
+
+      if (typeof resolvedValue === 'string') {
+        return {
+          status: 'known',
+          kind: 'string',
+          node,
+          value: resolvedValue,
+        };
+      }
+
+      if (node.type === 'ObjectExpression') {
+        const analysis = analyzeUrlObject(node, resolveIdentifier);
+
+        if (typeof analysis.pathnameValue === 'string') {
+          return {
+            status: 'known',
+            kind: 'url-object',
+            node: analysis.pathnameNode,
+            value: analysis.pathnameValue,
+          };
+        }
+      }
+
+      return { status: 'unknown', kind: 'unknown', node, value: null };
+    }
+
+    function reportUrlObjectQueryParams({
+      analysis,
+      reporter,
+      method,
+      asPath,
+      asWasReported,
+    }) {
+      if (!analysis || analysis.status !== 'missing') {
+        return;
+      }
+
+      reporter.reportMissingQueryParams({
+        node: analysis.queryNode || analysis.pathnameNode,
+        pathname: analysis.pathnameValue,
+        missingParams: analysis.missingParams,
+        method,
+        asValue: asPath.value,
+        hasUnknownAs: asPath.status === 'unknown',
+        asWasReported,
+      });
+    }
+
     function handleRouterCall(node) {
       const info = getRouterMethodCallInfo(
         node,
@@ -203,6 +277,7 @@ const noInvalidRouterNavigation = {
       const asArg = args[1];
       let urlValue = null;
       let asValue = null;
+      let urlObjectAnalysis = null;
       const resolveIdentifier = ensureStaticIdentifierResolver();
       const resolvedUrlValue = getStaticStringValue(urlArg, resolveIdentifier);
 
@@ -216,48 +291,40 @@ const noInvalidRouterNavigation = {
           hasAs: Boolean(asArg),
         });
       } else if (urlArg && urlArg.type === 'ObjectExpression') {
-        const pathnameNode = getObjectPropertyValue(urlArg, 'pathname');
-        const resolvedPathnameValue = getStaticStringValue(
-          pathnameNode,
-          resolveIdentifier
-        );
+        urlObjectAnalysis = analyzeUrlObject(urlArg, resolveIdentifier);
+        const { pathnameNode, pathnameValue } = urlObjectAnalysis;
 
-        if (typeof resolvedPathnameValue === 'string') {
-          const rawValue = resolvedPathnameValue;
+        if (typeof pathnameValue === 'string') {
           routerReporter.reportPathname({
             node: pathnameNode,
-            rawValue,
+            rawValue: pathnameValue,
             method,
           });
         }
       }
 
-      const resolvedAsValue = getStaticStringValue(asArg, resolveIdentifier);
+      const asPath = resolveNavigationPath(asArg, resolveIdentifier);
+      let asWasReported = false;
 
-      if (typeof resolvedAsValue === 'string') {
-        const rawValue = resolvedAsValue;
-        asValue = rawValue;
-        routerReporter.reportAsTarget({
-          node: asArg,
-          rawValue,
+      if (asPath.status === 'known') {
+        asWasReported = routerReporter.reportAsTarget({
+          node: asPath.node,
+          rawValue: asPath.value,
           method,
         });
-      } else if (asArg && asArg.type === 'ObjectExpression') {
-        const pathnameNode = getObjectPropertyValue(asArg, 'pathname');
-        const resolvedPathnameValue = getStaticStringValue(
-          pathnameNode,
-          resolveIdentifier
-        );
 
-        if (typeof resolvedPathnameValue === 'string') {
-          const rawValue = resolvedPathnameValue;
-          routerReporter.reportAsTarget({
-            node: pathnameNode,
-            rawValue,
-            method,
-          });
+        if (asPath.kind === 'string') {
+          asValue = asPath.value;
         }
       }
+
+      reportUrlObjectQueryParams({
+        analysis: urlObjectAnalysis,
+        reporter: routerReporter,
+        method,
+        asPath,
+        asWasReported,
+      });
 
       if (urlValue && asValue) {
         routerReporter.reportPreferUrlObject({
@@ -283,10 +350,12 @@ const noInvalidRouterNavigation = {
       const asNode = getJsxAttributeValue(node, 'as');
       let hrefValue = null;
       let asValue = null;
+      let hrefObjectAnalysis = null;
+      const resolveIdentifier = ensureStaticIdentifierResolver();
 
       const resolvedHrefValue = getStaticStringValue(
         hrefNode,
-        ensureStaticIdentifierResolver()
+        resolveIdentifier
       );
 
       if (typeof resolvedHrefValue === 'string') {
@@ -299,44 +368,37 @@ const noInvalidRouterNavigation = {
           hasAs: Boolean(asNode),
         });
       } else if (hrefNode && hrefNode.type === 'ObjectExpression') {
-        const pathnameNode = getObjectPropertyValue(hrefNode, 'pathname');
+        hrefObjectAnalysis = analyzeUrlObject(hrefNode, resolveIdentifier);
+        const { pathnameNode, pathnameValue } = hrefObjectAnalysis;
 
-        if (pathnameNode && isStringLiteral(pathnameNode)) {
-          const rawValue = getStringLiteralValue(pathnameNode);
+        if (typeof pathnameValue === 'string') {
           linkReporter.reportPathname({
             node: pathnameNode,
-            rawValue,
+            rawValue: pathnameValue,
             method: 'href',
           });
         }
       }
 
-      const resolvedAsValue = getStaticStringValue(
-        asNode,
-        ensureStaticIdentifierResolver()
-      );
+      const asPath = resolveNavigationPath(asNode, resolveIdentifier);
+      let asWasReported = false;
 
-      if (typeof resolvedAsValue === 'string') {
-        const rawValue = resolvedAsValue;
-        asValue = rawValue;
-        linkReporter.reportAsTarget({
-          node: asNode,
-          rawValue,
+      if (asPath.status === 'known') {
+        asValue = asPath.value;
+        asWasReported = linkReporter.reportAsTarget({
+          node: asPath.node,
+          rawValue: asPath.value,
           method: 'href',
         });
-      } else if (asNode && asNode.type === 'ObjectExpression') {
-        const pathnameNode = getObjectPropertyValue(asNode, 'pathname');
-
-        if (pathnameNode && isStringLiteral(pathnameNode)) {
-          const rawValue = getStringLiteralValue(pathnameNode);
-          asValue = rawValue;
-          linkReporter.reportAsTarget({
-            node: pathnameNode,
-            rawValue,
-            method: 'href',
-          });
-        }
       }
+
+      reportUrlObjectQueryParams({
+        analysis: hrefObjectAnalysis,
+        reporter: linkReporter,
+        method: 'href',
+        asPath,
+        asWasReported,
+      });
 
       if (hrefValue && asValue) {
         linkReporter.reportPreferUrlObject({

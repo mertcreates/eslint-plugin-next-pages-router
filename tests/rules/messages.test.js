@@ -208,6 +208,22 @@ describe('user-facing rule messages', () => {
           },
         ],
       },
+      {
+        ruleId: 'router-navigation',
+        rule: navigationRule,
+        code: "router.push({ pathname: '/posts/[id]', query: {} })",
+        messageId: 'navigationMissingQueryParam',
+        expected:
+          "router.push pathname '/posts/[id]' is missing the required query parameter 'id'. Add it to `query` or pass an `as` URL that matches this page path.",
+      },
+      {
+        ruleId: 'router-navigation',
+        rule: navigationRule,
+        code: "router.push({ pathname: '/blog/[category]/[slug]', query: {} })",
+        messageId: 'navigationMissingQueryParams',
+        expected:
+          "router.push pathname '/blog/[category]/[slug]' is missing the required query parameters 'category' and 'slug'. Add them to `query` or pass an `as` URL that matches this page path.",
+      },
     ].forEach(assertMessage);
   });
 
@@ -294,6 +310,24 @@ describe('user-facing rule messages', () => {
               "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: { id: '123' } }} />;",
           },
         ],
+      },
+      {
+        ruleId: 'router-navigation',
+        rule: navigationRule,
+        jsx: true,
+        code: "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: {} }} />;",
+        messageId: 'linkHrefMissingQueryParam',
+        expected:
+          "Link href pathname '/posts/[id]' is missing the required query parameter 'id'. Add it to `query` or pass an `as` URL that matches this page path.",
+      },
+      {
+        ruleId: 'router-navigation',
+        rule: navigationRule,
+        jsx: true,
+        code: "import Link from 'next/link'; const element = <Link href={{ pathname: '/blog/[category]/[slug]', query: {} }} />;",
+        messageId: 'linkHrefMissingQueryParams',
+        expected:
+          "Link href pathname '/blog/[category]/[slug]' is missing the required query parameters 'category' and 'slug'. Add them to `query` or pass an `as` URL that matches this page path.",
       },
     ].forEach(assertMessage);
   });

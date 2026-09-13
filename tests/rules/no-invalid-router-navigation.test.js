@@ -55,12 +55,60 @@ describe('no-invalid-router-navigation', () => {
         options: [{ pagesDir }],
       },
       {
+        code: "router.push({ pathname: '/blog/[...slug]', query: { slug } })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/blog/[[...slug]]' })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: params })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: { ...params } })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: { [key]: value } })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: {}, ...target })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: { other, ['id']: postId } })",
+        options: [{ pagesDir }],
+      },
+      {
         code: "const pathname = '/posts/[id]'; router.push({ pathname, query: { id: postId } })",
         options: [{ pagesDir }],
       },
       {
         code: "router.push({ pathname: '/posts/[id]' }, '/posts/123')",
         options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/blog/[...slug]' }, '/blog/a/b')",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]' }, { pathname: '/posts/123' })",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]' }, target)",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]' }, 'posts/123')",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]' }, '/docs/en/posts/123')",
+        options: [{ pagesDir, basePath: '/docs', locales: ['en'] }],
       },
       {
         code: "router.push('/posts/[id]', { pathname: '/posts/123' })",
@@ -104,6 +152,46 @@ describe('no-invalid-router-navigation', () => {
       },
     ],
     invalid: [
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: {} })",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationMissingQueryParam' }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]' })",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationMissingQueryParam' }],
+      },
+      {
+        code: "router.push({ pathname: '/blog/[category]/[slug]', query: { category } })",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationMissingQueryParam' }],
+      },
+      {
+        code: "router.push({ pathname: '/blog/[category]/[slug]', query: {} })",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationMissingQueryParams' }],
+      },
+      {
+        code: "router.push({ pathname: '/blog/[...slug]', query: {} })",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationMissingQueryParam' }],
+      },
+      {
+        code: "router.replace({ pathname: '/posts/[id]', query: {} })",
+        options: [{ pagesDir, warnOnUnknownPaths: false }],
+        errors: [{ messageId: 'navigationMissingQueryParam' }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: {} }, '/about')",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationMissingQueryParam' }],
+      },
+      {
+        code: "router.push({ pathname: '/posts/[id]', query: {} }, '/unknown')",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'asUnknown' }],
+      },
       {
         code: "router.push('/posts/[id]')",
         options: [{ pagesDir }],
@@ -301,8 +389,52 @@ describe('no-invalid-router-navigation', () => {
           "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: { id: postId } }} />;",
         options: [{ pagesDir }],
       },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/blog/[[...slug]]' }} />;",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: params }} />;",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]' }} as='/posts/123' />;",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: { ['id']: postId } }} />;",
+        options: [{ pagesDir }],
+      },
     ],
     invalid: [
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: {} }} />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefMissingQueryParam' }],
+      },
+      {
+        code:
+          "const pathname = '/posts/[id]'; import Link from 'next/link'; const element = <Link href={{ pathname, query: {} }} />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefMissingQueryParam' }],
+      },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/blog/[category]/[slug]', query: {} }} />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkHrefMissingQueryParams' }],
+      },
+      {
+        code:
+          "import Link from 'next/link'; const element = <Link href={{ pathname: '/posts/[id]', query: {} }} as='/unknown' />;",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'linkAsUnknown' }],
+      },
       {
         code: "import Link from 'next/link'; const element = <Link href='/abot' />;",
         options: [{ pagesDir }],

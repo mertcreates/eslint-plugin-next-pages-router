@@ -1,6 +1,6 @@
 {
   "name": "@mertcreates/eslint-plugin-next-pages-router",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "ESLint rules for validating Next.js Pages Router route comparisons and navigation targets against your pages directory.",
   "author": "Mert Ercan <me@mertercan.com> (https://mertercan.com)",
   "type": "commonjs",
@@ -41,7 +41,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mertcreates/eslint-plugin-next-pages-router.git"
+    "url": "git+https://github.com/mertcreates/eslint-plugin-next-pages-router.git"
   },
   "bugs": {
     "url": "https://github.com/mertcreates/eslint-plugin-next-pages-router/issues"

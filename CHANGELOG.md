@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.1] - 2026-09-13
+
+### Fixed
+
+- Navigation checks report required dynamic route parameters that are
+  definitely missing from statically readable `router.push`, `router.replace`,
+  and `next/link` URL objects.
+
+### Documentation
+
+- Added a local benchmark comparison for the missing query parameter check.
+  The measured process ranges overlap, so the results show no measurable
+  performance change.
+
 ## [1.2.0] - 2026-09-13
 
 ### Added

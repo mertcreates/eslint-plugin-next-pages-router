@@ -6,7 +6,7 @@ sources support two benchmark modes:
 1. `single`: Lints one large file string, including parsing and rule initialization.
 2. `files`: Lints many files from disk. This adds file I/O and parsing cost.
 
-## Quick Start
+## Quick start
 
 ```bash
 node scripts/benchmark.js
@@ -63,21 +63,30 @@ node scripts/benchmark.js --mode files --routes 1000 --files 100 --iterations 20
 | `--navigation-ratio` | `number` | `0.3` | mixed | Ratio of navigation statements in mixed mode. |
 | `--json` | `boolean` | `false` | both | Output JSON only. |
 
-## Verified results (2026-09-12)
+## Verified comparison (2026-09-13)
 
-The previous June results were invalid: ESLint skipped the temporary filenames
-with "No matching configuration found", and the benchmark discarded those
-messages. Do not compare those timings with the corrected results.
+This comparison uses version 1.2.0 at `f42f9ee` and the 1.2.1 source. Each
+version ran in four fresh Node processes. Each process used 2 warmup iterations
+followed by 10 measured iterations. Runs alternated between versions to reduce
+ordering bias.
 
-Each result below is one process with 2 warmup iterations and 10 measured
-iterations on Node `v22.22.2`, ESLint `9.39.4`, macOS. Both use
-`--mode files --rules mixed --suggest true`. Timings cover the complete batch,
-including file reads, parsing, rule initialization and reporting.
+The machine ran Node `v22.22.2`, npm `10.9.7`, ESLint `9.39.2`, and macOS
+`26.6.2` on arm64. Timings cover the whole batch, including file reads, parsing,
+rule initialization, and reporting.
 
-| Scenario | Routes | Statements | Files | Diagnostics/run | Avg | P95 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Synthetic (generated) | 2000 | 4000 | 100 | 232 | 398.37 ms | 414.24 ms |
-| Fixture pages dir | 8 | 4000 | 100 | 941 | 58.00 ms | 69.87 ms |
+| Scenario | 1.2.0 avg | 1.2.1 avg | Delta | 1.2.0 avg range | 1.2.1 avg range | Mean P95, 1.2.0 to 1.2.1 | Diagnostics/run, 1.2.0 to 1.2.1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Synthetic, generated routes | 396.22 ms | 393.60 ms | -0.7% | 388.39 to 406.50 ms | 387.01 to 398.45 ms | 423.54 to 409.07 ms | 232 to 232 |
+| Fixture pages directory | 54.65 ms | 55.36 ms | +1.3% | 53.56 to 56.03 ms | 53.82 to 57.03 ms | 62.27 to 61.86 ms | 941 to 1091 |
+
+The process ranges overlap in both scenarios. These samples do not show a
+measurable speedup or regression.
+
+The synthetic workload includes URL objects, but its generated `query: { id }`
+values satisfy the generated dynamic routes. Its diagnostic count is unchanged.
+The fixture workload uses the same query shape against routes with other
+required parameter names. Version 1.2.1 reports 150 additional diagnostics, so
+this scenario exercises the missing query parameter check.
 
 Commands used:
 
@@ -86,19 +95,14 @@ node scripts/benchmark.js --routes 1000 --statements 4000 --iterations 10 --warm
 node scripts/benchmark.js --pages-dir tests/fixtures/pages --statements 4000 --iterations 10 --warmup 2 --suggest true --mode files --files 100 --rules mixed --json true
 ```
 
-With the corrected benchmark but before connecting the matcher index, the same
-synthetic command averaged 402.84 ms with 232 diagnostics. The change to
-398.37 ms is too small in these single-process samples to claim an overall
-speedup. Regression tests separately prove that unrelated regex checks are
-skipped and suggestion ordering is preserved.
-
-Results vary by machine and workload. Compare relative changes, not absolute numbers.
+The commands are useful for comparing revisions on the same machine. These
+local macOS results do not predict CI or production performance.
 
 ## Notes
 
 1. `files` mode is closer to a real ESLint run.
 2. Neither mode subtracts an ESLint-only baseline; these are not isolated plugin costs.
-3. Benchmarks vary by machine, so compare relative changes instead of absolute numbers.
+3. Benchmarks vary by machine, so compare revisions under the same conditions.
 4. Parsing/configuration failures abort the benchmark. An untimed check confirms
    that each enabled rule reports a known invalid input, even for all-valid workloads.
 5. `diagnosticsPerRun` records the cold workload's diagnostic count; the rule
