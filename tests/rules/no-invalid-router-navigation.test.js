@@ -39,6 +39,10 @@ describe('no-invalid-router-navigation', () => {
         options: [{ pagesDir }],
       },
       {
+        code: "const [target] = '/missing'; router.push(target)",
+        options: [{ pagesDir }],
+      },
+      {
         code: "const slug = '123'; const href = `/posts/${slug}`; router.replace(href)",
         options: [{ pagesDir }],
       },
@@ -420,6 +424,94 @@ describe('no-invalid-router-navigation', () => {
             ],
           },
         ],
+      },
+    ],
+  });
+
+  ruleTester.run('router binding detection', rule, {
+    valid: [
+      {
+        code: "const router = { push() {} }; router.push('/missing')",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import router from './router'; router.push('/missing')",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/navigation'; const navigation = useRouter(); navigation.push('/missing')",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/navigation'; const router = useRouter(); router.push('/missing')",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import Router from 'next/navigation'; Router.push('/missing')",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/router'; function nested(useRouter) { const local = useRouter(); local.push('/missing'); }",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/router'; const navigation = useRouter(); function nested(navigation) { navigation.push('/missing'); }",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import PageRouter from 'next/router'; PageRouter.push('/missing')",
+        options: [{ pagesDir, routerObjects: ['router'] }],
+      },
+    ],
+    invalid: [
+      {
+        code: "import PageRouter from 'next/router'; PageRouter.push('/missing')",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationUnknown' }],
+      },
+      {
+        code:
+          "import { useRouter as usePageRouter } from 'next/router'; const navigation = usePageRouter(); navigation.push('/missing'); navigation.replace('/missing')",
+        options: [{ pagesDir }],
+        errors: [
+          { messageId: 'navigationUnknown' },
+          { messageId: 'navigationUnknown' },
+        ],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/navigation'; let router = useRouter(); router = makePagesRouter(); router.push('/missing')",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationUnknown' }],
+      },
+      {
+        code: "router.push('/missing')",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationUnknown' }],
+      },
+      {
+        code: "function navigate(router) { router.replace('/missing') }",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationUnknown' }],
+      },
+      {
+        code: "const router = createRouter(); router.push('/missing')",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationUnknown' }],
+      },
+      {
+        code: "let router = {}; router = createRouter(); router.push('/missing')",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'navigationUnknown' }],
+      },
+      {
+        code: "router.push('/missing')",
+        options: [{ pagesDir, routerObjects: [] }],
+        errors: [{ messageId: 'navigationUnknown' }],
       },
     ],
   });

@@ -1,11 +1,11 @@
 const {
   unwrapChain,
-  isStringLiteral,
-  getStringLiteralValue,
+  getStaticStringValue,
 } = require('../lib/ast');
 const { normalizeTrailingSlash } = require('../lib/routes');
 const { createRuleContext, normalizeRouteProperties } = require('../lib/ruleContext');
 const { createRouteCompareReporter } = require('../lib/routeCompareReporter');
+const { createStaticIdentifierResolver } = require('../lib/staticStrings');
 const {
   isMemberExpressionOnAllowedObject,
 } = require('../lib/routerObjects');
@@ -14,41 +14,46 @@ function isRouterMemberExpression(
   node,
   allowedObjects,
   allowedObjectPaths,
-  allowedProps
+  allowedProps,
+  bindingOptions
 ) {
   return isMemberExpressionOnAllowedObject(
     node,
     allowedObjects,
     allowedObjectPaths,
-    allowedProps
+    allowedProps,
+    bindingOptions
   );
 }
 
-function isAsPathMemberExpression(node, allowedObjects, allowedObjectPaths) {
+function isAsPathMemberExpression(
+  node,
+  allowedObjects,
+  allowedObjectPaths,
+  bindingOptions
+) {
   return isMemberExpressionOnAllowedObject(
     node,
     allowedObjects,
     allowedObjectPaths,
-    ['asPath']
+    ['asPath'],
+    bindingOptions
   );
 }
 
 const EQUALITY_OPERATORS = new Set(['===', '==', '!==', '!=']);
 
-function getRouteStringLiteral(node) {
-  if (!isStringLiteral(node)) {
-    return null;
-  }
-  const rawValue = getStringLiteralValue(node);
+function getRouteStringValue(node, resolveIdentifier) {
+  const rawValue = getStaticStringValue(node, resolveIdentifier);
 
-  if (!rawValue || !rawValue.startsWith('/')) {
+  if (typeof rawValue !== 'string' || !rawValue.startsWith('/')) {
     return null;
   }
 
   return rawValue;
 }
 
-function getLiteralComparisons(node, isAllowedMember) {
+function getLiteralComparisons(node, isAllowedMember, resolveIdentifier) {
   if (!EQUALITY_OPERATORS.has(node.operator)) {
     return [];
   }
@@ -56,7 +61,7 @@ function getLiteralComparisons(node, isAllowedMember) {
   const pairs = [];
 
   if (isAllowedMember(node.left)) {
-    const rawValue = getRouteStringLiteral(node.right);
+    const rawValue = getRouteStringValue(node.right, resolveIdentifier);
 
     if (rawValue) {
       pairs.push({
@@ -68,7 +73,7 @@ function getLiteralComparisons(node, isAllowedMember) {
   }
 
   if (isAllowedMember(node.right)) {
-    const rawValue = getRouteStringLiteral(node.left);
+    const rawValue = getRouteStringValue(node.left, resolveIdentifier);
 
     if (rawValue) {
       pairs.push({
@@ -120,7 +125,7 @@ const validRouterRouteCompare = {
     hasSuggestions: true,
     docs: {
       description:
-        'Validate Next.js router.route/pathname/asPath comparisons using pages manifest',
+        'Validate Next.js router.route/pathname/asPath comparisons against the pages directory',
       examples: {
         valid: [
           "router.route === '/settings/manage-profile/[type]'",
@@ -163,19 +168,19 @@ const validRouterRouteCompare = {
     ],
     messages: {
       invalidRouteCompare:
-        "{{obj}}.{{prop}} is compared to '{{value}}', which is not a known route pattern. Use a dynamic pattern (e.g. '/posts/[id]') or switch to asPath for concrete URLs.{{suggestion}}",
+        "{{obj}}.{{prop}} is compared to '{{value}}', which does not match a page path in your pages directory. Check the path against your pages directory.{{suggestion}}",
       routeWithQueryOrHash:
         "{{obj}}.{{prop}} must not contain query (?...) or hash (#...). Use asPath for those instead.",
       includesRouteUnknown:
-        "includes({{obj}}.{{prop}}) contains '{{value}}', which is not a known route pattern. Use a dynamic pattern (e.g. '/posts/[id]') or compare asPath.{{suggestion}}",
+        "includes({{obj}}.{{prop}}) contains '{{value}}', which does not match a page path in your pages directory. Check the path against your pages directory.{{suggestion}}",
       asPathWithPattern:
-        "asPath must be compared to a concrete URL (e.g. '/posts/123'), not a dynamic pattern like '{{value}}'.",
+        "asPath must be compared to a URL with parameter values, such as '/posts/123', instead of '{{value}}'.",
       asPathUnknown:
-        "asPath '{{value}}' does not match any route pattern in your pages directory.{{suggestion}}",
+        "asPath '{{value}}' does not match any page in your pages directory. Check the path against your pages directory.{{suggestion}}",
       includesWithPattern:
-        "includes(asPath) must only contain concrete URLs, not route patterns like '{{value}}'.",
+        "includes(asPath) must only contain URLs with parameter values, such as '/posts/123', not page paths such as '{{value}}'.",
       includesUnknown:
-        "includes(asPath) contains '{{value}}' which does not match any page in your project.{{suggestion}}",
+        "includes(asPath) contains '{{value}}' which does not match any page in your project. Check the path against your pages directory.{{suggestion}}",
     },
   },
 
@@ -197,17 +202,46 @@ const validRouterRouteCompare = {
       return {};
     }
 
-    const { routerObjectNames, routerObjectPaths } = ruleContext;
+    const {
+      routerObjectNames,
+      routerObjectPaths,
+      hasExplicitRouterObjects,
+    } = ruleContext;
     const reporter = createRouteCompareReporter(context, ruleContext);
+    const sourceCode = context.sourceCode || context.getSourceCode();
+    const getRouterScope =
+      sourceCode && typeof sourceCode.getScope === 'function'
+        ? (node) => sourceCode.getScope(node)
+        : typeof context.getScope === 'function'
+          ? () => context.getScope()
+          : null;
+    const routerBindingOptions = {
+      autoDetect: !hasExplicitRouterObjects,
+      getScope: getRouterScope,
+    };
+    let resolveStaticIdentifierValue = null;
+
+    function ensureStaticIdentifierResolver() {
+      if (!resolveStaticIdentifierValue && sourceCode && sourceCode.scopeManager) {
+        resolveStaticIdentifierValue = createStaticIdentifierResolver(sourceCode);
+      }
+
+      return resolveStaticIdentifierValue;
+    }
 
     function validateRoutePatternEquality(node) {
-      const comparisons = getLiteralComparisons(node, (member) =>
-        isRouterMemberExpression(
-          member,
-          routerObjectNames,
-          routerObjectPaths,
-          routeProperties
-        )
+      const resolveIdentifier = ensureStaticIdentifierResolver();
+      const comparisons = getLiteralComparisons(
+        node,
+        (member) =>
+          isRouterMemberExpression(
+            member,
+            routerObjectNames,
+            routerObjectPaths,
+            routeProperties,
+            routerBindingOptions
+          ),
+        resolveIdentifier
       );
 
       for (const comparison of comparisons) {
@@ -216,8 +250,17 @@ const validRouterRouteCompare = {
     }
 
     function validateAsPathEquality(node) {
-      const comparisons = getLiteralComparisons(node, (member) =>
-        isAsPathMemberExpression(member, routerObjectNames, routerObjectPaths)
+      const resolveIdentifier = ensureStaticIdentifierResolver();
+      const comparisons = getLiteralComparisons(
+        node,
+        (member) =>
+          isAsPathMemberExpression(
+            member,
+            routerObjectNames,
+            routerObjectPaths,
+            routerBindingOptions
+          ),
+        resolveIdentifier
       );
 
       for (const comparison of comparisons) {
@@ -239,18 +282,17 @@ const validRouterRouteCompare = {
         !isAsPathMemberExpression(
           info.argNode,
           routerObjectNames,
-          routerObjectPaths
+          routerObjectPaths,
+          routerBindingOptions
         )
       ) {
         return;
       }
 
-      for (const el of info.arrayNode.elements) {
-        if (!el || !isStringLiteral(el)) {
-          continue;
-        }
+      const resolveIdentifier = ensureStaticIdentifierResolver();
 
-        const rawValue = getRouteStringLiteral(el);
+      for (const el of info.arrayNode.elements) {
+        const rawValue = getRouteStringValue(el, resolveIdentifier);
 
         if (!rawValue) {
           continue;
@@ -275,7 +317,8 @@ const validRouterRouteCompare = {
           info.argNode,
           routerObjectNames,
           routerObjectPaths,
-          routeProperties
+          routeProperties,
+          routerBindingOptions
         )
       ) {
         return;
@@ -283,13 +326,10 @@ const validRouterRouteCompare = {
 
       const argNode = unwrapChain(info.argNode);
       const arrayValues = new Set();
+      const resolveIdentifier = ensureStaticIdentifierResolver();
 
       for (const el of info.arrayNode.elements) {
-        if (!el || !isStringLiteral(el)) {
-          continue;
-        }
-
-        const rawValue = getRouteStringLiteral(el);
+        const rawValue = getRouteStringValue(el, resolveIdentifier);
 
         if (!rawValue) {
           continue;
@@ -299,11 +339,7 @@ const validRouterRouteCompare = {
       }
 
       for (const el of info.arrayNode.elements) {
-        if (!el || !isStringLiteral(el)) {
-          continue;
-        }
-
-        const rawValue = getRouteStringLiteral(el);
+        const rawValue = getRouteStringValue(el, resolveIdentifier);
 
         if (!rawValue) {
           continue;
@@ -327,27 +363,27 @@ const validRouterRouteCompare = {
           discriminant,
           routerObjectNames,
           routerObjectPaths,
-          routeProperties
+          routeProperties,
+          routerBindingOptions
         );
       const isAsPath =
         isAsPathMemberExpression(
           discriminant,
           routerObjectNames,
-          routerObjectPaths
+          routerObjectPaths,
+          routerBindingOptions
         );
 
       if (!isRouteLike && !isAsPath) {
         return;
       }
 
+      const resolveIdentifier = ensureStaticIdentifierResolver();
+
       for (const caseNode of node.cases) {
-        if (!caseNode.test || !isStringLiteral(caseNode.test)) {
-          continue;
-        }
+        const rawValue = getRouteStringValue(caseNode.test, resolveIdentifier);
 
-        const rawValue = getStringLiteralValue(caseNode.test);
-
-        if (!rawValue || !rawValue.startsWith('/')) {
+        if (!rawValue) {
           continue;
         }
 

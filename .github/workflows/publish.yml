@@ -31,7 +31,10 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Test
-        run: bun test
+        run: bun run test
+
+      - name: Type test
+        run: bun run test:types
 
       - name: Check npm version
         id: npm_version

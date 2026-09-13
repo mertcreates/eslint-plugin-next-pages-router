@@ -12,106 +12,21 @@ const {
 } = require('../lib/nextLink');
 const { createRuleContext } = require('../lib/ruleContext');
 const { getAllowedRouterMethodCall } = require('../lib/routerCalls');
+const { createStaticIdentifierResolver } = require('../lib/staticStrings');
 
-function getRouterMethodCallInfo(node, allowedObjects, allowedObjectPaths) {
+function getRouterMethodCallInfo(
+  node,
+  allowedObjects,
+  allowedObjectPaths,
+  bindingOptions
+) {
   return getAllowedRouterMethodCall(
     node,
     allowedObjects,
     allowedObjectPaths,
-    ['push', 'replace']
+    ['push', 'replace'],
+    bindingOptions
   );
-}
-
-function createStaticIdentifierResolver(sourceCode) {
-  const identifierToVariable = new WeakMap();
-  const variableCache = new WeakMap();
-  const resolvingVariables = new Set();
-  let isIndexed = false;
-
-  function indexVariables() {
-    if (isIndexed) {
-      return;
-    }
-
-    isIndexed = true;
-
-    const scopes =
-      sourceCode && sourceCode.scopeManager && sourceCode.scopeManager.scopes
-        ? sourceCode.scopeManager.scopes
-        : null;
-
-    if (!Array.isArray(scopes)) {
-      return;
-    }
-
-    for (const scope of scopes) {
-      if (!scope || !Array.isArray(scope.variables)) {
-        continue;
-      }
-
-      for (const variable of scope.variables) {
-        if (!variable || !Array.isArray(variable.references)) {
-          continue;
-        }
-
-        for (const reference of variable.references) {
-          if (reference && reference.identifier) {
-            identifierToVariable.set(reference.identifier, variable);
-          }
-        }
-      }
-    }
-  }
-
-  function resolveVariable(variable) {
-    if (variableCache.has(variable)) {
-      return variableCache.get(variable);
-    }
-
-    if (
-      variable.defs.length !== 1 ||
-      !variable.defs[0] ||
-      !variable.defs[0].node ||
-      variable.defs[0].type !== 'Variable' ||
-      !variable.defs[0].parent ||
-      variable.defs[0].parent.kind !== 'const' ||
-      !variable.defs[0].node.init ||
-      resolvingVariables.has(variable)
-    ) {
-      variableCache.set(variable, null);
-      return null;
-    }
-
-    resolvingVariables.add(variable);
-
-    try {
-      const variableDef = variable.defs[0];
-      const resolvedValue = getStaticStringValue(
-        variableDef.node.init,
-        resolveIdentifier
-      );
-      variableCache.set(variable, resolvedValue);
-      return resolvedValue;
-    } finally {
-      resolvingVariables.delete(variable);
-    }
-  }
-
-  function resolveIdentifier(node) {
-    if (!node || node.type !== 'Identifier') {
-      return null;
-    }
-
-    indexVariables();
-
-    if (!identifierToVariable.has(node)) {
-      return null;
-    }
-
-    return resolveVariable(identifierToVariable.get(node));
-  }
-
-  return resolveIdentifier;
 }
 
 const LINK_MESSAGES = {
@@ -142,7 +57,7 @@ const noInvalidRouterNavigation = {
     hasSuggestions: true,
     docs: {
       description:
-        'Validate Next.js router.push/replace and next/link href targets against the pages manifest',
+        'Validate Next.js router.push/replace and next/link href targets against the pages directory',
       examples: {
         valid: [
           "router.push('/about')",
@@ -181,37 +96,37 @@ const noInvalidRouterNavigation = {
     ],
     messages: {
       navigationPatternWithoutAs:
-        "router.{{method}} is called with route pattern '{{value}}' but no `as` value. Use a URL object with `pathname`/`query` or pass a concrete `as` URL.",
+        "router.{{method}} uses page path '{{value}}' but no `as` URL was provided. Use a URL object with `pathname`/`query` or pass a URL with parameter values as the `as` value.",
       navigationPatternUnknown:
-        "router.{{method}} is called with route pattern '{{value}}', which is not a known route pattern. Use a dynamic pattern (e.g. '/posts/[id]').{{suggestion}}",
+        "router.{{method}} uses page path '{{value}}', which is not in your pages directory. Use a page path such as '/posts/[id]'.{{suggestion}}",
       navigationUnknown:
-        "router.{{method}} is called with '{{value}}', which does not match any route pattern in your pages directory.{{suggestion}}",
+        "No page matches '{{value}}'.{{suggestion}}",
       asWithPattern:
-        "router.{{method}} `as` value '{{value}}' must be a concrete URL, not a route pattern.",
+        "Use a URL with parameter values, such as '/posts/123', instead of '{{value}}'.",
       asUnknown:
-        "router.{{method}} `as` value '{{value}}' does not match any route pattern in your pages directory.{{suggestion}}",
+        "router.{{method}} `as` value '{{value}}' does not match any page in your pages directory. Check the path against your pages directory.{{suggestion}}",
       pathnameUnknown:
-        "router.{{method}} is called with pathname '{{value}}', which does not match any known pages route. Use a dynamic pattern (e.g. '/posts/[id]') when passing `query`.{{suggestion}}",
+        "router.{{method}} pathname '{{value}}' does not match a page in your pages directory. Check the path against your pages directory.{{suggestion}}",
       pathnameWithQueryOrHash:
         "router.{{method}} pathname must not contain query (?...) or hash (#...). Use query or `as` instead.",
       preferUrlObject:
-        "router.{{method}} uses a pattern string with a string `as`. Consider using a UrlObject with `pathname` and `query` to make params explicit.",
+        "router.{{method}} passes a page path and a separate URL. Use `pathname` and `query` to keep the parameter values together.",
       linkHrefPatternWithoutAs:
-        "Link href is called with route pattern '{{value}}' but no `as` value. Use a URL object with `pathname`/`query` or pass a concrete `as` URL.",
+        "Link href uses page path '{{value}}' but no `as` value was provided. Use a URL object with `pathname`/`query` or pass a URL with parameter values as the `as` value.",
       linkHrefPatternUnknown:
-        "Link href is called with route pattern '{{value}}', which is not a known route pattern. Use a dynamic pattern (e.g. '/posts/[id]').{{suggestion}}",
+        "Link href uses page path '{{value}}', which is not in your pages directory. Use a page path such as '/posts/[id]'.{{suggestion}}",
       linkHrefUnknown:
-        "Link href is called with '{{value}}', which does not match any route pattern in your pages directory.{{suggestion}}",
+        "No page matches '{{value}}'.{{suggestion}}",
       linkHrefPathnameUnknown:
-        "Link href is called with pathname '{{value}}', which does not match any known pages route. Use a dynamic pattern (e.g. '/posts/[id]') when passing `query`.{{suggestion}}",
+        "Link href uses pathname '{{value}}', which does not match a page in your pages directory. Check the path against your pages directory.{{suggestion}}",
       linkHrefPathnameWithQueryOrHash:
         "Link href pathname must not contain query (?...) or hash (#...). Use query or `as` instead.",
       linkAsWithPattern:
-        "Link `as` value '{{value}}' must be a concrete URL, not a route pattern.",
+        "Use a URL with parameter values, such as '/posts/123', instead of '{{value}}'.",
       linkAsUnknown:
-        "Link `as` value '{{value}}' does not match any route pattern in your pages directory.{{suggestion}}",
+        "Link `as` value '{{value}}' does not match any page in your pages directory. Check the path against your pages directory.{{suggestion}}",
       linkPreferUrlObject:
-        "Link uses a pattern string with a string `as`. Consider using a UrlObject with `pathname` and `query` to make params explicit.",
+        "Link passes a page path and a separate URL. Use `pathname` and `query` to keep the parameter values together.",
     },
   },
 
@@ -221,6 +136,12 @@ const noInvalidRouterNavigation = {
     const preferUrlObject = options.preferUrlObject !== false;
     const sourceCode = context.sourceCode || context.getSourceCode();
     const getJsxScope =
+      sourceCode && typeof sourceCode.getScope === 'function'
+        ? (node) => sourceCode.getScope(node)
+        : typeof context.getScope === 'function'
+          ? () => context.getScope()
+          : null;
+    const getRouterScope =
       sourceCode && typeof sourceCode.getScope === 'function'
         ? (node) => sourceCode.getScope(node)
         : typeof context.getScope === 'function'
@@ -240,7 +161,15 @@ const noInvalidRouterNavigation = {
       return {};
     }
 
-    const { routerObjectNames, routerObjectPaths } = ruleContext;
+    const {
+      routerObjectNames,
+      routerObjectPaths,
+      hasExplicitRouterObjects,
+    } = ruleContext;
+    const routerBindingOptions = {
+      autoDetect: !hasExplicitRouterObjects,
+      getScope: getRouterScope,
+    };
     const routerReporter = createNavigationReporter(context, ruleContext, {
       preferUrlObject,
       messages: ROUTER_MESSAGES,
@@ -255,7 +184,8 @@ const noInvalidRouterNavigation = {
       const info = getRouterMethodCallInfo(
         node,
         routerObjectNames,
-        routerObjectPaths
+        routerObjectPaths,
+        routerBindingOptions
       );
 
       if (!info) {

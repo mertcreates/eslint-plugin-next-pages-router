@@ -1,15 +1,22 @@
 {
   "name": "@mertcreates/eslint-plugin-next-pages-router",
-  "version": "1.1.0",
-  "description": "ESLint rules to validate Next.js Pages Router route comparisons and navigation targets against your pages manifest.",
+  "version": "1.2.0",
+  "description": "ESLint rules for validating Next.js Pages Router route comparisons and navigation targets against your pages directory.",
   "author": "Mert Ercan <me@mertercan.com> (https://mertercan.com)",
   "type": "commonjs",
   "main": "index.js",
+  "types": "index.d.ts",
   "exports": {
-    ".": "./index.js"
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./index.js",
+      "import": "./index.js",
+      "default": "./index.js"
+    }
   },
   "files": [
     "index.js",
+    "index.d.ts",
     "rules/",
     "lib/",
     "README.md",
@@ -57,14 +64,19 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "@types/eslint": "8.56.12"
+  },
   "devDependencies": {
     "c8": "^9.1.0",
     "eslint": "^9.0.0",
-    "mocha": "^10.0.0"
+    "mocha": "^10.0.0",
+    "typescript": "5.8.3"
   },
   "scripts": {
     "test": "mocha \"tests/rules/**/*.test.js\"",
     "test:coverage": "c8 --reporter=text --reporter=html mocha \"tests/rules/**/*.test.js\"",
-    "bench": "node scripts/benchmark.js"
+    "bench": "node scripts/benchmark.js",
+    "test:types": "node tests/types/package.test.cjs"
   }
 }

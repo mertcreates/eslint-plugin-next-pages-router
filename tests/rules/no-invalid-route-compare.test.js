@@ -71,8 +71,125 @@ describe('no-invalid-route-compare', () => {
         code: "['/posts/[id]', 123].includes(router.route)",
         options: [{ pagesDir }],
       },
+      {
+        code: "const [target] = '/missing'; router.route === target",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "let target = '/missing'; router.route === target",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "var target = '/missing'; router.route === target",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "function getTarget() { return '/missing'; } const target = getTarget(); router.route === target",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import target from './target'; router.route === target",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "function check(target) { return router.route === target; }",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "const target = 123; router.route === target",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "const suffix = unknown; const target = `/${suffix}`; router.route === target",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "const first = second; const second = first; router.route === first",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "const target = '/missing'; function check() { const target = '/posts/[id]'; return router.route === target; }",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "const target = '/missing'; router.route === target",
+        options: [{ pagesDir, checkEquality: false }],
+      },
+      {
+        code: "const target = '/missing'; [target].includes(router.route)",
+        options: [{ pagesDir, checkIncludes: false }],
+      },
+      {
+        code: "const target = '/missing'; switch (router.route) { case target: break; }",
+        options: [{ pagesDir, checkSwitch: false }],
+      },
     ],
     invalid: [
+      {
+        code: "const target = '/missing'; router.route === target",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "const target = '/missing'; target === router.route",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "const target = '/missing'; router.pathname === target",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "const target = '/missing'; router.asPath === target",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'asPathUnknown' }],
+      },
+      {
+        code: "const target = `/missing`; router.route === target",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "const segment = 'missing'; const target = `/${segment}`; router.route === target",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "const target = '/post/[id]'; router.route === target",
+        options: [{ pagesDir, suggestClosestRoute: true }],
+        errors: [{ messageId: 'invalidRouteCompare', suggestions: [] }],
+      },
+      {
+        code: "const segment = 'id'; const target = `/post/[${segment}]`; router.route === target",
+        options: [{ pagesDir, suggestClosestRoute: true }],
+        errors: [{ messageId: 'invalidRouteCompare', suggestions: [] }],
+      },
+      {
+        code: "const target = '/missing'; [target].includes(router.route)",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'includesRouteUnknown' }],
+      },
+      {
+        code: "const known = '/posts/[id]'; const target = '/post/[id]'; [known, target].includes(router.route)",
+        options: [{ pagesDir, suggestClosestRoute: true }],
+        errors: [{ messageId: 'includesRouteUnknown', suggestions: [] }],
+      },
+      {
+        code: "const target = '/missing'; [target].includes(router.asPath)",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'includesUnknown' }],
+      },
+      {
+        code: "const target = '/missing'; switch (router.route) { case target: break; }",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "const target = '/missing'; switch (router.asPath) { case target: break; }",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'asPathUnknown' }],
+      },
       {
         code: "router.route === '/posts/123'",
         options: [{ pagesDir }],
@@ -199,7 +316,7 @@ describe('no-invalid-route-compare', () => {
         errors: [
           {
             message:
-              "includes(router.route) contains '/posts/[id]/comment/[commentId]', which is not a known route pattern. Use a dynamic pattern (e.g. '/posts/[id]') or compare asPath.",
+              "includes(router.route) contains '/posts/[id]/comment/[commentId]', which does not match a page path in your pages directory. Check the path against your pages directory.",
           },
         ],
       },
@@ -472,6 +589,95 @@ describe('no-invalid-route-compare', () => {
         code: "['/posts/123'].includes(r.route)",
         options: [{ pagesDir, routerObjects: ['r'] }],
         errors: [{ messageId: 'includesRouteUnknown' }],
+      },
+    ],
+  });
+
+  ruleTester.run('router binding detection', rule, {
+    valid: [
+      {
+        code: "const router = { route: '/not-a-router' }; router.route === '/missing'",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import router from './router'; router.route === '/missing'",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/navigation'; const navigation = useRouter(); navigation.route === '/missing'",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/navigation'; const router = useRouter(); router.route === '/missing'",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import Router from 'next/navigation'; Router.route === '/missing'",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/router'; function nested(useRouter) { const local = useRouter(); local.route === '/missing'; }",
+        options: [{ pagesDir }],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/router'; const navigation = useRouter(); function nested(navigation) { navigation.route === '/missing'; }",
+        options: [{ pagesDir }],
+      },
+      {
+        code: "import PageRouter from 'next/router'; PageRouter.route === '/missing'",
+        options: [{ pagesDir, routerObjects: ['router'] }],
+      },
+    ],
+    invalid: [
+      {
+        code: "import PageRouter from 'next/router'; PageRouter.route === '/missing'",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code:
+          "import { useRouter as usePageRouter } from 'next/router'; const navigation = usePageRouter(); navigation.route === '/missing'; ['/missing'].includes(navigation.route); switch (navigation.route) { case '/missing': break; }",
+        options: [{ pagesDir }],
+        errors: [
+          { messageId: 'invalidRouteCompare' },
+          { messageId: 'includesRouteUnknown' },
+          { messageId: 'invalidRouteCompare' },
+        ],
+      },
+      {
+        code:
+          "import { useRouter } from 'next/navigation'; let router = useRouter(); router = makePagesRouter(); router.route === '/missing'",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "router.route === '/missing'",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "function check(router) { return router.route === '/missing'; }",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "const router = createRouter(); router.route === '/missing'",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "let router = {}; router = createRouter(); router.route === '/missing'",
+        options: [{ pagesDir }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
+      },
+      {
+        code: "router.route === '/missing'",
+        options: [{ pagesDir, routerObjects: [] }],
+        errors: [{ messageId: 'invalidRouteCompare' }],
       },
     ],
   });

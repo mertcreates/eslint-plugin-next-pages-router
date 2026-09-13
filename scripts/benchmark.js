@@ -5,7 +5,7 @@ const {
   readFileSync,
   rmSync,
 } = require('fs');
-const { join } = require('path');
+const { join, basename } = require('path');
 const { tmpdir } = require('os');
 const { performance } = require('perf_hooks');
 const { Linter } = require('eslint');
@@ -174,6 +174,7 @@ const routesCount = parseIntArg('routes', realRoutesCount || 400);
 const statementsCount = parseIntArg('statements', routesCount * 4);
 
 const tempRoot = mkdtempSync(join(tmpdir(), 'eslint-next-pages-router-bench-'));
+process.once('exit', () => rmSync(tempRoot, { recursive: true, force: true }));
 const pagesDir = pagesDirArg || join(tempRoot, 'pages');
 
 if (!pagesDirArg) {
@@ -338,7 +339,7 @@ if (rulesMode === 'compare') {
 
 const code = lines.join('\n');
 
-const linter = new Linter();
+const linter = new Linter({ configType: 'flat' });
 
 const config = [
   {
@@ -405,21 +406,48 @@ if (mode === 'files') {
   }
 }
 
-function runOnce() {
-  if (mode === 'files') {
-    for (const filePath of filePaths) {
-      const text = readFileSync(filePath, 'utf8');
-      linter.verify(text, config, { filename: filePath });
-    }
-    return [];
+function verify(text, filename) {
+  const messages = linter.verify(text, config, { filename });
+  const failure = messages.find((message) => message.fatal || !message.ruleId);
+
+  if (failure) {
+    throw new Error(`Benchmark lint failed: ${failure.message}`);
   }
 
-  return linter.verify(code, config, { filename: join(tempRoot, 'input.js') });
+  return messages;
+}
+
+function runOnce() {
+  if (mode === 'files') {
+    let diagnostics = 0;
+    for (const filePath of filePaths) {
+      const text = readFileSync(filePath, 'utf8');
+      // Flat config matches filenames relative to the linter's working directory.
+      diagnostics += verify(text, basename(filePath)).length;
+    }
+    return diagnostics;
+  }
+
+  return verify(code, 'input.js').length;
 }
 
 const coldStart = performance.now();
-runOnce();
+const diagnosticsPerRun = runOnce();
 const coldDuration = performance.now() - coldStart;
+
+// Check each enabled rule outside the timed workload, even for all-valid input.
+const ruleChecks = verify(
+  "router.route === '/__benchmark__?x=1'; router.push('/[__benchmark__]');",
+  'benchmark-check.js'
+);
+for (const ruleId of Object.keys(config[0].rules)) {
+  if (!ruleChecks.some((message) => message.ruleId === ruleId)) {
+    throw new Error(`Benchmark rule check failed: ${ruleId} did not report`);
+  }
+}
+if (Object.keys(config[0].rules).length === 0) {
+  throw new Error('Benchmark rule check failed: no rules enabled');
+}
 
 const warmStart = performance.now();
 for (let i = 0; i < warmup; i += 1) {
@@ -445,6 +473,7 @@ const report = {
   files: mode === 'files' ? filePaths.length : 1,
   navigationRatio: rulesMode === 'mixed' ? navigationRatio : null,
   suggestClosestRoute,
+  diagnosticsPerRun,
   coldRunMs: coldDuration,
   warmupRuns: warmup,
   warmupMs: warmupDuration,
@@ -477,11 +506,10 @@ if (jsonOnly) {
     console.log(`Pages dir: ${pagesDir}`);
   }
   console.log(`Suggest closest: ${report.suggestClosestRoute}`);
+  console.log(`Diagnostics per run: ${report.diagnosticsPerRun}`);
   console.log(`Cold run: ${formatMs(report.coldRunMs)}`);
   console.log(`Warmup: ${report.warmupRuns}x -> ${formatMs(report.warmupMs)}`);
   console.log(`Measured: ${report.measuredRuns}x -> ${formatMs(report.measuredTotalMs)}`);
   console.log(`Avg: ${formatMs(report.avgMs)} | Median: ${formatMs(report.medianMs)} | P95: ${formatMs(report.p95Ms)}`);
   console.log(`Min: ${formatMs(report.minMs)} | Max: ${formatMs(report.maxMs)}`);
 }
-
-rmSync(tempRoot, { recursive: true, force: true });

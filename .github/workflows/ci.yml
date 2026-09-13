@@ -32,3 +32,6 @@ jobs:
 
       - name: Test
         run: bun run test
+
+      - name: Type test
+        run: bun run test:types

@@ -1,11 +1,9 @@
 # Benchmarks
 
-This repo includes two benchmark modes. One uses generated routes to measure
-rule overhead in isolation. The other reuses a real `pages/` directory so you
-can see how the rules behave on an actual project.
+This repo can use generated routes or an existing `pages/` directory. Both
+sources support two benchmark modes:
 
-1. `single`: Lints one large file string. This keeps the measurement close to
-   the rule itself.
+1. `single`: Lints one large file string, including parsing and rule initialization.
 2. `files`: Lints many files from disk. This adds file I/O and parsing cost.
 
 ## Quick Start
@@ -65,35 +63,44 @@ node scripts/benchmark.js --mode files --routes 1000 --files 100 --iterations 20
 | `--navigation-ratio` | `number` | `0.3` | mixed | Ratio of navigation statements in mixed mode. |
 | `--json` | `boolean` | `false` | both | Output JSON only. |
 
-## Latest results (2026-06-11)
+## Verified results (2026-09-12)
 
-All runs below used `--mode files --rules mixed --suggest true`. Each result is
-the average of 5 runs on Node `v22.22.2` on macOS.
+The previous June results were invalid: ESLint skipped the temporary filenames
+with "No matching configuration found", and the benchmark discarded those
+messages. Do not compare those timings with the corrected results.
 
-| Scenario | Routes | Statements | Files | Avg | P95 |
-| --- | --- | --- | --- | --- | --- |
-| Synthetic (generated) | 6000 | 12000 | 80 | 2.63 ms | 3.69 ms |
-| Real project pages dir | 48 | 12000 | 80 | 2.26 ms | 2.91 ms |
-| Fixture pages dir | 8 | 12000 | 80 | 2.33 ms | 2.92 ms |
+Each result below is one process with 2 warmup iterations and 10 measured
+iterations on Node `v22.22.2`, ESLint `9.39.4`, macOS. Both use
+`--mode files --rules mixed --suggest true`. Timings cover the complete batch,
+including file reads, parsing, rule initialization and reporting.
+
+| Scenario | Routes | Statements | Files | Diagnostics/run | Avg | P95 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Synthetic (generated) | 2000 | 4000 | 100 | 232 | 398.37 ms | 414.24 ms |
+| Fixture pages dir | 8 | 4000 | 100 | 941 | 58.00 ms | 69.87 ms |
 
 Commands used:
 
 ```bash
-node scripts/benchmark.js --routes 3000 --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed
-node scripts/benchmark.js --pages-dir "/absolute/path/to/real/pages" --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed
-node scripts/benchmark.js --pages-dir tests/fixtures/pages --statements 12000 --iterations 50 --warmup 2 --suggest true --mode files --files 80 --rules mixed
+node scripts/benchmark.js --routes 1000 --statements 4000 --iterations 10 --warmup 2 --suggest true --mode files --files 100 --rules mixed --json true
+node scripts/benchmark.js --pages-dir tests/fixtures/pages --statements 4000 --iterations 10 --warmup 2 --suggest true --mode files --files 100 --rules mixed --json true
 ```
 
-Run 5 times and average:
-
-```bash
-node -e "const {execFileSync}=require('child_process');const runs=5;const args=['scripts/benchmark.js','--routes','3000','--statements','12000','--iterations','50','--warmup','2','--suggest','true','--mode','files','--files','80','--rules','mixed','--json','true'];const results=[];for(let i=0;i<runs;i+=1){results.push(JSON.parse(execFileSync(process.execPath,args,{encoding:'utf8'})));}const avg=(key)=>results.reduce((sum,r)=>sum+r[key],0)/results.length;console.log({runs,avgMs:avg('avgMs'),p95Ms:avg('p95Ms')});"
-```
+With the corrected benchmark but before connecting the matcher index, the same
+synthetic command averaged 402.84 ms with 232 diagnostics. The change to
+398.37 ms is too small in these single-process samples to claim an overall
+speedup. Regression tests separately prove that unrelated regex checks are
+skipped and suggestion ordering is preserved.
 
 Results vary by machine and workload. Compare relative changes, not absolute numbers.
 
 ## Notes
 
 1. `files` mode is closer to a real ESLint run.
-2. `single` mode is useful when you want to isolate rule overhead.
+2. Neither mode subtracts an ESLint-only baseline; these are not isolated plugin costs.
 3. Benchmarks vary by machine, so compare relative changes instead of absolute numbers.
+4. Parsing/configuration failures abort the benchmark. An untimed check confirms
+   that each enabled rule reports a known invalid input, even for all-valid workloads.
+5. `diagnosticsPerRun` records the cold workload's diagnostic count; the rule
+   check is not included. In real-project mode the route manifest is loaded to
+   generate input before timing, so `coldRunMs` is not a cold manifest load.
